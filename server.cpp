@@ -1,12 +1,8 @@
 #include "store.h"
 #include <iostream>
-
-// Server implementation
-#include <iostream>
 #include <unistd.h>
 #include <cstring>
 #include <netinet/in.h>
-#include "store.h"
 
 std::string processCommand(const std::string&, Store&);
 
@@ -19,8 +15,10 @@ int main() {
 
     Store store;
 
+    // Create TCP socket
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
+    // Configure socket address
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(PORT);
@@ -31,6 +29,11 @@ int main() {
     std::cout << "Server running on port " << PORT << std::endl;
 
     new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
+    
+    // Send connection established message to client with newline
+    std::string welcome = "Connection established, enter exit to quit\n";
+    send(new_socket, welcome.c_str(), welcome.size(), 0);
+    std::cout << "Client connected" << std::endl;
 
     char buffer[1024] = {0};
 
@@ -38,11 +41,29 @@ int main() {
         memset(buffer, 0, sizeof(buffer));
         int valread = read(new_socket, buffer, 1024);
 
-        if (valread <= 0) break;
+        if (valread <= 0) {
+            std::cout << "Client disconnected" << std::endl;
+
+            break;
+        }
+
+        // Convert to string and strip trailing whitespace
+        std::string command(buffer);
+        if (!command.empty() && command.back() == '\n') {
+            command.pop_back();
+        }
+        if (!command.empty() && command.back() == '\r') {
+            command.pop_back();
+        }
+
+        // Check for exit command
+        if (command == "exit") {
+            std::cout << "Received exit command, closing connection" << std::endl;
+            break;
+        }
 
         std::string response = processCommand(buffer, store);
         response += "\n";
-
         send(new_socket, response.c_str(), response.size(), 0);
     }
 
