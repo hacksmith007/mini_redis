@@ -14,5 +14,7 @@ public:
     std::string set(const std::string& key, const std::string& value);
     std::string get(const std::string& key);
     std::string del(const std::string& key);
+    void save(const std::string& filename);
+    void load(const std::string& filename);
 };
 #endif

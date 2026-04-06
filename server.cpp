@@ -14,6 +14,7 @@ int main() {
     int addrlen = sizeof(address);
 
     Store store;
+    store.load("data.db");
 
     // Create TCP socket
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
