@@ -5,6 +5,7 @@ std::string processCommand(const std::string&, Store&);
 
 int main() {
     Store store;
+    store.load("data.db");
     std::string input;
 
     while (true) {
