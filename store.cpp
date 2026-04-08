@@ -3,6 +3,10 @@
 #include <fstream>
 #include <sstream>
 #include <unistd.h>
+#include  <unordered_map>
+#include <thread>
+#include <mutex>
+
 #include <cstdio>
 #include <ctime>
 
@@ -22,6 +26,26 @@ void log_replay_event(const std::string& message) {
 }
 }
 
+std::unordered_map<std::string, std::time_t> expiry;
+std::mutex expiry_mutex;
+
+bool is_expired(const std::string& key) {
+    auto it = expiry.find(key);
+    if (it == expiry.end()) return false;
+    return std::time(nullptr) > it->second;
+}
+
+void cleanup_expired(std::unordered_map<std::string, std::string>& db) {
+    std::lock_guard<std::mutex> lock(expiry_mutex);
+    if (auto it = expiry.begin(); it != expiry.end()) {
+        if (std::time(nullptr) > it->second) {
+            db.erase(it->first);
+            it = expiry.erase(it);
+        }else {
+            ++it;
+        }
+    }
+}
 // AOF format: SET key value\n or DEL key\n
 
 Store::Store(const std::string& aof_file_name, bool fsync) 
