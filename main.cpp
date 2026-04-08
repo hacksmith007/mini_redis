@@ -4,8 +4,10 @@
 std::string processCommand(const std::string&, Store&);
 
 int main() {
-    Store store;
-    store.load("data.db");
+    // AOF file will auto-load on construction
+    // fsync=false for performance, true for crash-safety
+    Store store("data.aof", false);
+    
     std::string input;
 
     while (true) {
@@ -13,6 +15,12 @@ int main() {
         std::getline(std::cin, input);
 
         if (input == "exit") break;
+        
+        if (input == "compact") {
+            store.compact_aof();
+            std::cout << "AOF compaction triggered." << std::endl;
+            continue;
+        }
 
         std::cout << processCommand(input, store) << std::endl;
     }
