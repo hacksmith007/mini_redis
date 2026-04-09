@@ -1,4 +1,3 @@
-#include "store.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -6,25 +5,9 @@
 #include  <unordered_map>
 #include <thread>
 #include <mutex>
+#include "store.h"
+#include "RedisCommon.h"
 
-#include <cstdio>
-#include <ctime>
-
-namespace {
-void log_replay_event(const std::string& message) {
-    std::ofstream log_file("redis.log", std::ios::app);
-    if (!log_file.is_open()) {
-        return;
-    }
-
-    std::time_t now = std::time(nullptr);
-    char timestamp[32];
-    if (std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now))) {
-        log_file << "[" << timestamp << "] ";
-    }
-    log_file << message << "\n";
-}
-}
 
 std::unordered_map<std::string, std::time_t> expiry;
 std::mutex expiry_mutex;
@@ -54,9 +37,9 @@ Store::Store(const std::string& aof_file_name, bool fsync)
     aof_file.open(aof_filename, std::ios::app);
     if (!aof_file.is_open()) {
         std::cerr << "Warning: Could not open AOF file: " << aof_filename << std::endl;
-        log_replay_event("FAIL AOF_OPEN file=" + aof_filename);
+        RedisLogger::log_replay_event("FAIL AOF_OPEN file=" + aof_filename);
     } else {
-        log_replay_event("SUCCESS AOF_OPEN file=" + aof_filename);
+        RedisLogger::log_replay_event("SUCCESS AOF_OPEN file=" + aof_filename);
     }
     
     // Replay existing AOF to rebuild state
@@ -85,14 +68,14 @@ void Store::append_to_aof(const std::string& command) {
 void Store::replay_aof(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
-        log_replay_event("FAIL AOF_REPLAY_OPEN file=" + filename);
+        RedisLogger::log_replay_event("FAIL AOF_REPLAY_OPEN file=" + filename);
         return;
     }
     
     std::string line;
     while (std::getline(file, line)) {
         if (line.empty()) {
-            log_replay_event("FAIL AOF_REPLAY command=<empty> reason=empty_line");
+            RedisLogger::log_replay_event("FAIL AOF_REPLAY command=<empty> reason=empty_line");
             continue;
         }
         
@@ -103,7 +86,7 @@ void Store::replay_aof(const std::string& filename) {
         if (command == "SET") {
             std::string key, value;
             if (!(iss >> key)) {
-                log_replay_event("FAIL AOF_REPLAY command=\"" + line + "\" reason=missing_key");
+                RedisLogger::log_replay_event("FAIL AOF_REPLAY command=\"" + line + "\" reason=missing_key");
                 continue;
             }
             // Rest of line is the value (handles spaces in values)
@@ -111,28 +94,28 @@ void Store::replay_aof(const std::string& filename) {
             if (value_pos < line.length()) {
                 value = line.substr(value_pos);
                 db[key] = value;
-                log_replay_event("SUCCESS AOF_REPLAY command=\"" + line + "\"");
+                RedisLogger::log_replay_event("SUCCESS AOF_REPLAY command=\"" + line + "\"");
             } else {
-                log_replay_event("FAIL AOF_REPLAY command=\"" + line + "\" reason=missing_value");
+                RedisLogger::log_replay_event("FAIL AOF_REPLAY command=\"" + line + "\" reason=missing_value");
             }
         } 
         else if (command == "DEL") {
             std::string key;
             if (!(iss >> key)) {
-                log_replay_event("FAIL AOF_REPLAY command=\"" + line + "\" reason=missing_key");
+                RedisLogger::log_replay_event("FAIL AOF_REPLAY command=\"" + line + "\" reason=missing_key");
                 continue;
             }
             db.erase(key);
-            log_replay_event("SUCCESS AOF_REPLAY command=\"" + line + "\"");
+            RedisLogger::log_replay_event("SUCCESS AOF_REPLAY command=\"" + line + "\"");
         }
         else {
-            log_replay_event("FAIL AOF_REPLAY command=\"" + line + "\" reason=unknown_command");
+            RedisLogger::log_replay_event("FAIL AOF_REPLAY command=\"" + line + "\" reason=unknown_command");
         }
     }
     
     file.close();
     std::cout << "AOF replay complete. Loaded " << db.size() << " keys." << std::endl;
-    log_replay_event("SUCCESS AOF_REPLAY_COMPLETE file=" + filename + " keys=" + std::to_string(db.size()));
+    RedisLogger::log_replay_event("SUCCESS AOF_REPLAY_COMPLETE file=" + filename + " keys=" + std::to_string(db.size()));
 }
 
 std::string Store::set(const std::string& key, const std::string& value) {
@@ -188,14 +171,14 @@ void Store::load(const std::string& filename) {
     file.close();
 }
 
-void Store::compact_aof() {
+int8_t Store::compact_aof() {
     // Create a new AOF with current state (rewrite)
     std::string temp_file = aof_filename + ".tmp";
     std::ofstream temp(temp_file, std::ios::trunc);
     
     if (!temp.is_open()) {
         std::cerr << "Error: Could not create temporary AOF file." << std::endl;
-        return;
+        return -1;
     }
     
     // Write current state as SET commands
@@ -211,15 +194,16 @@ void Store::compact_aof() {
     
     if (std::remove(aof_filename.c_str()) != 0) {
         std::cerr << "Error: Could not remove old AOF file." << std::endl;
-        return;
+        return -1;
     }
     
     if (std::rename(temp_file.c_str(), aof_filename.c_str()) != 0) {
         std::cerr << "Error: Could not rename temporary AOF file." << std::endl;
-        return;
+        return -1;
     }
     
     // Reopen AOF for appending
     aof_file.open(aof_filename, std::ios::app);
     std::cout << "AOF compaction complete. New size: " << db.size() << " keys." << std::endl;
+    return 0;
 }

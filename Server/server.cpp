@@ -3,8 +3,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <netinet/in.h>
-
-std::string processCommand(const std::string&, Store&);
+#include "parser.h"
 
 #define PORT 8080
 
@@ -61,6 +60,13 @@ int main() {
         if (command == "exit") {
             std::cout << "Received exit command, closing connection" << std::endl;
             break;
+        }
+        if (command == "compact") {
+            std::cout << "Received compact command" << std::endl;
+            if (store.compact_aof()) {
+                std::cout << "Received compact command" << std::endl;
+            }
+            std::cout << "Compact server started" << std::endl;
         }
 
         std::string response = processCommand(buffer, store);

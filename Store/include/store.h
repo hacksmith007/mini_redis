@@ -27,6 +27,6 @@ public:
     std::string del(const std::string& key);
     
     void load(const std::string& filename);
-    void compact_aof();
+    int8_t compact_aof();
 };
 #endif
