@@ -3,6 +3,7 @@
 // Parser implementation
 #include <sstream>
 #include "store.h"
+#include "commonLibsEnums.h"
 
 std::string processCommand(const std::string& input, Store& store) {
     std::istringstream iss(input);
@@ -27,4 +28,10 @@ std::string processCommand(const std::string& input, Store& store) {
     }
 
     return "ERROR: Unknown command";
+}
+
+
+RedisStatus redisPollCleanup(Store& store) {
+    RedisStatus status = REDIS_STATUS_OK;
+    return status;
 }

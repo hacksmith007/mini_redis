@@ -4,6 +4,7 @@
 #include <cstring>
 #include <netinet/in.h>
 #include "parser.h"
+#include "RedisCommon.h"
 
 #define PORT 8080
 
@@ -27,13 +28,13 @@ int main() {
     listen(server_fd, 3);
 
     std::cout << "Server running on port " << PORT << std::endl;
-
+    REDIS_LOG(INFO, "Server running on port \"" + std::to_string(PORT) + "\"");
     new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
     
     // Send connection established message to client with newline
     std::string welcome = "Connection established, enter exit to quit\n";
     send(new_socket, welcome.c_str(), welcome.size(), 0);
-    std::cout << "Client connected" << std::endl;
+    REDIS_LOG(INFO, "Client connected");
 
     char buffer[1024] = {0};
 
@@ -43,7 +44,7 @@ int main() {
 
         if (valread <= 0) {
             std::cout << "Client disconnected" << std::endl;
-
+            REDIS_LOG(INFO, "Client disconnected");
             break;
         }
 
@@ -59,14 +60,14 @@ int main() {
         // Check for exit command
         if (command == "exit") {
             std::cout << "Received exit command, closing connection" << std::endl;
+            REDIS_LOG(INFO, "Received exit command, closing connection");
             break;
         }
         if (command == "compact") {
-            std::cout << "Received compact command" << std::endl;
             if (store.compact_aof()) {
-                std::cout << "Received compact command" << std::endl;
+                REDIS_LOG(ERROR, "Compact command could not be completed");
             }
-            std::cout << "Compact server started" << std::endl;
+            REDIS_LOG(INFO, "Compact command completed");
         }
 
         std::string response = processCommand(buffer, store);
