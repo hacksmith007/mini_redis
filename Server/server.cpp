@@ -35,6 +35,7 @@
  * ============================================================
  */
 int main() {
+    REDIS_LOG(INFO, "Entrypoint Redis Started");
     int server_fd, new_socket;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
