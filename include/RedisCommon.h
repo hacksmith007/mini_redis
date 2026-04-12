@@ -7,7 +7,7 @@
 #include "commonLibsEnums.h"
 
 void redis_logger(const std::string& message,
-                      const RedisLogLevel level,
+                      RedisLogLevel level,
                       const char* file,
                       const char* func,
                       int line);

@@ -19,7 +19,7 @@ private:
     void rewrite_aof();
 
 public:
-    Store(const std::string& aof_file = "data.aof", bool fsync = false);
+    Store(std::string  aof_file = "data.aof", bool fsync = false);
     ~Store();
     
     std::string set(const std::string& key, const std::string& value);
