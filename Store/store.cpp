@@ -60,9 +60,9 @@ Store::Store(std::string  aof_file_name, const bool fsync)
     aof_file.open(aof_filename, std::ios::app);
     if (!aof_file.is_open()) {
         std::cerr << "Warning: Could not open AOF file: " << aof_filename << std::endl;
-        REDIS_LOG(INFO, "FAIL AOF_OPEN file=" + aof_filename);
+        REDIS_LOG(INFO, "FAIL AOF_OPEN file=%s", aof_filename.c_str());
     } else {
-        REDIS_LOG(INFO, "SUCCESS AOF_OPEN file=" + aof_filename);
+        REDIS_LOG(INFO, "SUCCESS AOF_OPEN file=%s", aof_filename.c_str());
     }
 
     replay_aof(aof_filename);
@@ -111,7 +111,7 @@ void Store::append_to_aof(const std::string& command) {
 void Store::replay_aof(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
-        REDIS_LOG(INFO, "FAIL AOF_REPLAY_OPEN file=" + filename);
+        REDIS_LOG(INFO, "FAIL AOF_REPLAY_OPEN file=",  filename.c_str());
         return;
     }
 
@@ -129,7 +129,7 @@ void Store::replay_aof(const std::string& filename) {
         if (command == "SET") {
             std::string key;
             if (!(iss >> key)) {
-                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=\"" + line + "\" reason=missing_key");
+                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=missing_key" ,line.c_str());
                 continue;
             }
 
@@ -137,28 +137,28 @@ void Store::replay_aof(const std::string& filename) {
             if (value_pos < line.length()) {
                 std::string value = line.substr(value_pos);
                 db[key] = value;
-                REDIS_LOG(INFO , "SUCCESS AOF_REPLAY command=\"" + line + "\"");
+                REDIS_LOG(INFO , "SUCCESS AOF_REPLAY command= %s", line.c_str());
             } else {
-                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=\"" + line + "\" reason=missing_value");
+                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=missing_value", line.c_str());
             }
         }
         else if (command == "DEL") {
             std::string key;
             if (!(iss >> key)) {
-                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=\"" + line + "\" reason=missing_key");
+                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=missing_key",  line.c_str());
                 continue;
             }
             db.erase(key);
-            REDIS_LOG(INFO, "SUCCESS AOF_REPLAY command=\"" + line + "\"");
+            REDIS_LOG(INFO, "SUCCESS AOF_REPLAY command=%s", line.c_str());
         }
         else {
-            REDIS_LOG(INFO, "FAIL AOF_REPLAY command=\"" + line + "\" reason=unknown_command");
+            REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=unknown_command", line.c_str());
         }
     }
 
     file.close();
     std::cout << "AOF replay complete. Loaded " << db.size() << " keys." << std::endl;
-    REDIS_LOG(INFO,  "SUCCESS AOF_REPLAY_COMPLETE file=" + filename + " keys=" + std::to_string(db.size()));
+    REDIS_LOG(INFO,  "SUCCESS AOF_REPLAY_COMPLETE file=%s keys=%s", filename.c_str(),  std::to_string(db.size()).c_str());
 }
 
 /**
@@ -276,7 +276,7 @@ int8_t Store::compact_aof() {
     }
 
     aof_file.open(aof_filename, std::ios::app);
-    REDIS_LOG(INFO, "SUCCESS AOF compaction complete. New size" + std::to_string(db.size()) + " keys=" + aof_filename);
+    REDIS_LOG(INFO, "SUCCESS AOF compaction complete. New size=%s keys=%s",  std::to_string(db.size()).c_str() , aof_filename.c_str());
 
     return 0;
 }

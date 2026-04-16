@@ -64,7 +64,7 @@ int main() {
     listen(server_fd, 3);
 
     std::cout << "Server running on port " << PORT << std::endl;
-    REDIS_LOG(INFO, "Server running on port \"" + std::to_string(PORT) + "\"");
+    REDIS_LOG(INFO, "Server running on port %s", std::to_string(PORT).c_str());
 
     // Blocking call: wait for a client to connect
     new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen);

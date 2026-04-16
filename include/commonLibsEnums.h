@@ -9,7 +9,7 @@
 
 enum RedisLogLevel {
     INFO,
-    WARNING,
+    WARN,
     ERROR,
     DEBUG,
 };

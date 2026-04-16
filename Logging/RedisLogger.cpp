@@ -1,8 +1,10 @@
 //
 // Created by Rahul Ranjan on 10/04/26.
 //
-#include <iostream>
-#include <fstream>
+#include <cstdarg>
+#include <thread>
+#include <mutex>
+#include  "RedisCommon.h"
 #include "commonLibsEnums.h"
 
 /**
@@ -31,69 +33,93 @@ std::string redisStatusToString(const RedisStatus status) {
             return "REDIS_STATUS_UNKNOWN";
     }
 }
-
-/**
- * ============================================================
- * FUNCTION: redisLogLevelToString
- * ============================================================
- * Converts RedisLogLevel enum to string representation.
- * ============================================================
- */
-std::string redisLogLevelToString(const RedisLogLevel level) {
-    switch (level) {
-        case INFO:
-            return "INFO";
-        case DEBUG:
-            return "DEBUG";
-        case WARNING:
-            return "WARN";
-        case ERROR:
-            return "ERROR";
-        default:
-            return "UNKNOWN";
-    }
+// Constructor
+Logger::Logger() {
+    general_fp = fopen("redis.log", "a");
+    error_fp   = fopen("redis_error.log", "a");
 }
 
-/**
- * ============================================================
- * FUNCTION: redis_logger
- * ============================================================
- * Writes log messages to log files with timestamp and metadata.
- *
- * Responsibilities:
- *  - Append logs to redis.log
- *  - Write ERROR logs separately to redis_error.log
- *  - Include timestamp, file, function, and line number
- * ============================================================
- */
-void redis_logger(const std::string& message,
-                  RedisLogLevel level,
-                  const char* file,
-                  const char* func,
-                  int line) {
+// Destructor
+Logger::~Logger() {
+    if (general_fp) fclose(general_fp);
+    if (error_fp) fclose(error_fp);
+}
 
-    std::ofstream log_file("redis.log", std::ios::app);
-    std::ofstream err_log_file("redis_error.log", std::ios::app);
+// Singleton instance
+Logger& Logger::instance() {
+    static Logger logger;
+    return logger;
+}
 
-    if (!log_file.is_open() || !err_log_file.is_open()) {
-        return; // fail silently if file cannot be opened
+// Convert level to string
+const char* Logger::level_to_string(RedisLogLevel level) {
+    switch (level) {
+        case DEBUG: return "DEBUG";
+        case INFO:  return "INFO";
+        case WARN:  return "WARN";
+        case ERROR: return "ERROR";
+        default:    return "UNKNOWN";
+    }
+}
+const char* get_short_file(const char* path) {
+    const char* slash1 = strrchr(path, '/');
+    const char* slash2 = strrchr(path, '\\'); // Windows support
+
+    const char* last = slash1 > slash2 ? slash1 : slash2;
+    return last ? last + 1 : path;
+}
+
+// Get current timestamp
+std::string Logger::current_time() {
+    char buffer[64];
+    const std::time_t now = std::time(nullptr);
+    const std::tm* tm_info = std::localtime(&now);
+
+    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", tm_info);
+    return std::string(buffer);
+}
+
+// Main log function
+void Logger::log(RedisLogLevel level,
+                 const char* file,
+                 int line,
+                 const char* func,
+                 const char* fmt, ...) {
+    std::lock_guard<std::mutex> lock(mtx);
+
+    char message[1024];
+
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(message, sizeof(message), fmt, args);
+    va_end(args);
+
+    std::string time = current_time();
+    const char* level_str = level_to_string(level);
+
+    // 🔥 include file, line, function
+    const char* short_file = get_short_file(file);
+    if (general_fp) {
+        fprintf(general_fp,
+                "[%s] [%s] [%s:%d:%s] %s\n",
+                time.c_str(),
+                level_str,
+                short_file,
+                line,
+                func,
+                message);
+        fflush(general_fp);
     }
 
-    std::time_t now = std::time(nullptr);
-    char timestamp[32];
-
-    if (std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now))) {
-        log_file << "[" << timestamp << "] ";
+    if (level == ERROR && error_fp) {
+        fprintf(error_fp,
+                "[%s] [%s] [%s:%d:%s] %s\n",
+                time.c_str(),
+                level_str,
+                short_file,
+                line,
+                func,
+                message);
+        fflush(error_fp);
     }
-
-    if (level == ERROR) {
-        err_log_file << "[" << timestamp << "] "
-                     << "[" << redisLogLevelToString(level) << "] "
-                     << "[" << file << ": " << line << " - " << func << "] "
-                     << message << "\n";
-    }
-
-    log_file << "[" << redisLogLevelToString(level) << "] "
-             << "[" << file << ": " << line << " - " << func << "] "
-             << message << "\n";
 }
