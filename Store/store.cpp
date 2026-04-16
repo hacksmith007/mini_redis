@@ -142,6 +142,26 @@ void Store::replay_aof(const std::string& filename) {
                 REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=missing_value", line.c_str());
             }
         }
+        else if (command == "SETEX") {
+            std::string key;
+            if (!(iss >> key)) {
+                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=missing_key",line.c_str());
+                continue;
+            }
+            std::string ttl_seconds;
+            iss >> ttl_seconds;
+            const time_t expire_at = std::time(nullptr) + stoi(ttl_seconds);
+            expiry[key] = expire_at;
+            size_t value_pos = line.find(ttl_seconds) + ttl_seconds.length() + 1;
+            if (value_pos < line.length()) {
+                std::string value = line.substr(value_pos);
+                db[key] = value;
+
+                REDIS_LOG(INFO , "SUCCESS AOF_REPLAY command=%s",line.c_str());
+            } else {
+                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=missing_key",line.c_str() );
+            }
+        }
         else if (command == "DEL") {
             std::string key;
             if (!(iss >> key)) {
