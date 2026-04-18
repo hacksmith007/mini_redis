@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include "scheduler.h"
+#include  "store.h"
 
 /**
  * ============================================================
@@ -102,4 +103,6 @@ void Scheduler::stop() {
  */
 void expiryPoll() {
     std::cout << "Polling thread running " << std::endl;
+    // Store store;
+    // cleanup_expired();
 }

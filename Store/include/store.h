@@ -13,13 +13,14 @@ private:
     std::ofstream aof_file;
     std::string aof_filename;
     bool use_fsync;
+    std::unordered_map<std::string, std::time_t> expiry;
+    std::mutex store_mutex;
 
     void append_to_aof(const std::string& command);
     void replay_aof(const std::string& filename);
-    void rewrite_aof();
 
 public:
-    Store(std::string  aof_file = "data.aof", bool fsync = false);
+    explicit Store(std::string  aof_file = "data.aof", bool fsync = false);
     ~Store();
 
     std::string set(const std::string& key, const std::string& value);
@@ -28,5 +29,7 @@ public:
 
     void load(const std::string& filename);
     int8_t compact_aof();
+    bool is_expired(const std::string& key);
+    void cleanup_expired();
 };
 #endif

@@ -9,8 +9,8 @@
 #include "store.h"
 #include "RedisCommon.h"
 
-std::unordered_map<std::string, std::time_t> expiry;
-std::mutex expiry_mutex;
+// std::unordered_map<std::string, std::time_t> expiry;
+// std::mutex store_mutex;
 
 /**
  * ============================================================
@@ -20,7 +20,7 @@ std::mutex expiry_mutex;
  * Returns true if expired, false otherwise.
  * ============================================================
  */
-bool is_expired(const std::string& key) {
+bool Store::is_expired(const std::string& key) {
     auto it = expiry.find(key);
     if (it == expiry.end()) return false;
     return std::time(nullptr) > it->second;
@@ -34,8 +34,8 @@ bool is_expired(const std::string& key) {
  * Must be called periodically (e.g., via scheduler).
  * ============================================================
  */
-void cleanup_expired(std::unordered_map<std::string, std::string>& db) {
-    std::lock_guard<std::mutex> lock(expiry_mutex);
+void Store::cleanup_expired() {
+    std::lock_guard<std::mutex> lock(store_mutex);
     if (auto it = expiry.begin(); it != expiry.end()) {
         if (std::time(nullptr) > it->second) {
             db.erase(it->first);
