@@ -4,6 +4,8 @@
 
 #include <iostream>
 #include "scheduler.h"
+
+#include "RedisCommon.h"
 #include  "store.h"
 
 /**
@@ -101,8 +103,7 @@ void Scheduler::stop() {
  * Intended to be scheduled via Scheduler.
  * ============================================================
  */
-void expiryPoll() {
-    std::cout << "Polling thread running " << std::endl;
-    // Store store;
-    // cleanup_expired();
+void expiryPoll(Store &store) {
+    // REDIS_LOG(INFO, "ExpiryPoll Running");
+    store.cleanup_expired();
 }

@@ -26,6 +26,7 @@ public:
     std::string set(const std::string& key, const std::string& value);
     std::string get(const std::string& key);
     std::string del(const std::string& key);
+    std::string setexpire(const std::string &key, const std::string& value, const std::string& ttl_seconds);
 
     void load(const std::string& filename);
     int8_t compact_aof();

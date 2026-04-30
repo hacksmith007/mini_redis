@@ -47,12 +47,18 @@ int main() {
     // Start Scheduler (background thread)
     // Runs expiry polling every 5 seconds
     Scheduler scheduler;
-    std::cout << "Scheduler running" << std::endl;
-    scheduler.register_task(expiryPoll, 5000);
+    REDIS_LOG(INFO, "Scheduler started");
+    scheduler.register_task([&store]() { expiryPoll(store); }, 5000);
 
     // Create TCP socket
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
+    // Allow port reuse
+    int opt = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
     // Configure server address
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
@@ -114,21 +120,27 @@ int main() {
             REDIS_LOG(INFO, "Received exit command, closing connection");
             break;
         }
-
+        REDIS_LOG(INFO, "Received command %s", command.c_str());
         // Compact AOF (Append Only File)
+        std::string response = "Unknown Command\n" ;
         if (command == "compact") {
             if (store.compact_aof()) {
+                response = "Compact Failed";
                 REDIS_LOG(ERROR, "Compact command could not be completed");
             }
+            response = "Compact Successful\n";
             REDIS_LOG(INFO, "Compact command completed");
+
         }
+        else {
+            //Process command and generate response
+            response = processCommand(buffer, store);
+            response += "\n";
 
-        //Process command and generate response
-        std::string response = processCommand(buffer, store);
-        response += "\n";
-
+        }
         //Send response back to client
         send(new_socket, response.c_str(), response.size(), 0);
+
     }
 
     // Cleanup resources

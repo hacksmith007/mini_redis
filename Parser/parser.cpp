@@ -22,9 +22,10 @@ std::string processCommand(const std::string& input, Store& store) {
     std::istringstream iss(input);
     std::string cmd, key, value;
 
-    iss >> cmd >> key;
+    iss >> cmd;
 
     if (cmd == "SET") {
+        iss >> key;
         size_t value_pos = input.find(key) + key.length() + 1; // extract full value including spaces
         if (value_pos < input.length()) {
             value = input.substr(value_pos);
@@ -32,7 +33,21 @@ std::string processCommand(const std::string& input, Store& store) {
         }
         return "ERROR: SET requires a value";
     }
+    else if (cmd == "SETEX") {
+        iss >> key;
+        std::string ttl_seconds;
+        iss >> ttl_seconds;
+
+
+        size_t value_pos = input.find(key) + key.length() + 1; // extract full value including spaces
+        if (value_pos < input.length()) {
+            value = input.substr(value_pos);
+            return store.setexpire(key, value, ttl_seconds);
+        }
+        return "ERROR: SET requires a value";
+    }
     else if (cmd == "GET") {
+        iss >> key;
         return store.get(key);
     }
     else if (cmd == "DEL") {

@@ -36,12 +36,13 @@ bool Store::is_expired(const std::string& key) {
  */
 void Store::cleanup_expired() {
     std::lock_guard<std::mutex> lock(store_mutex);
-    if (auto it = expiry.begin(); it != expiry.end()) {
+    // REDIS_LOG(INFO, "cleanup_expired");
+    for (auto it = expiry.begin(); it != expiry.end(); ++it ) {
         if (std::time(nullptr) > it->second) {
+            REDIS_LOG(INFO,"Cleared %s ", it->first.c_str());
             db.erase(it->first);
             it = expiry.erase(it);
-        } else {
-            ++it;
+            compact_aof();
         }
     }
 }
@@ -56,7 +57,7 @@ void Store::cleanup_expired() {
  */
 Store::Store(std::string  aof_file_name, const bool fsync)
     : aof_filename(std::move(aof_file_name)), use_fsync(fsync) {
-
+    REDIS_LOG(DEBUG, "filename %s", aof_filename.c_str());
     aof_file.open(aof_filename, std::ios::app);
     if (!aof_file.is_open()) {
         std::cerr << "Warning: Could not open AOF file: " << aof_filename << std::endl;
@@ -65,7 +66,7 @@ Store::Store(std::string  aof_file_name, const bool fsync)
         REDIS_LOG(INFO, "SUCCESS AOF_OPEN file=%s", aof_filename.c_str());
     }
 
-    replay_aof(aof_filename);
+      replay_aof(aof_filename);
 }
 
 /**
@@ -91,11 +92,15 @@ Store::~Store() {
  * ============================================================
  */
 void Store::append_to_aof(const std::string& command) {
-    if (!aof_file.is_open()) return;
-
-    aof_file << command;
-
+    REDIS_LOG(DEBUG, "command %s", command.c_str());
+    std::string clean = command;
+    // Remove trailing newline(s)
+    while (!clean.empty() && (clean.back() == '\n' || clean.back() == '\r')) {
+        clean.pop_back();
+    }
+    aof_file << clean << std::endl;
     if (use_fsync) {
+        REDIS_LOG(INFO, "Flushed");
         aof_file.flush(); // ensure durability
     }
 }
@@ -190,10 +195,23 @@ void Store::replay_aof(const std::string& filename) {
  */
 std::string Store::set(const std::string& key, const std::string& value) {
     db[key] = value;
+    REDIS_LOG(INFO, "storing entry to aof");
 
     std::string cmd = "SET " + key + " " + value;
     append_to_aof(cmd);
 
+    return "OK";
+}
+
+std::string Store::setexpire(const std::string &key, const std::string& value, const std::string& ttl_seconds) {
+    std::string cmd = "SETEX " + key + " " + ttl_seconds + " " + value;
+    REDIS_LOG(INFO, "setex storing to aof %s", cmd.c_str());
+    db[key] = value;
+
+    const time_t expire_at = std::time(nullptr) + std::stoi(ttl_seconds);
+    expiry[key] = expire_at;
+
+    append_to_aof(cmd);
     return "OK";
 }
 
@@ -205,6 +223,7 @@ std::string Store::set(const std::string& key, const std::string& value) {
  * ============================================================
  */
 std::string Store::get(const std::string& key) {
+    REDIS_LOG(INFO, "getting key=%s", key.c_str());
     if (db.count(key)) return db[key];
     return "NULL";
 }
@@ -234,6 +253,7 @@ std::string Store::del(const std::string& key) {
  * ============================================================
  */
 void Store::load(const std::string& filename) {
+    REDIS_LOG(INFO,"LOADING data from file %s", filename.c_str());
     std::ifstream file(filename);
     if (!file.is_open()) return;
 
@@ -252,7 +272,7 @@ void Store::load(const std::string& filename) {
 
         std::string key = key_part.substr(key_colon + 1);
         std::string value = value_part.substr(value_colon + 1);
-
+        REDIS_LOG(DEBUG,"keys %s value %s", key.c_str(), value.c_str());
         db[key] = value;
     }
 

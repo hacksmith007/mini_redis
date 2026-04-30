@@ -12,6 +12,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include "store.h"
 
 class Scheduler {
 public:
@@ -40,5 +41,5 @@ private:
     void run();  // worker loop
 };
 
-void expiryPoll();
+void expiryPoll(Store &store);
 #endif //MINI_REDIS_SCHEDULER_H
