@@ -39,7 +39,7 @@ std::string processCommand(const std::string& input, Store& store) {
         iss >> ttl_seconds;
 
 
-        size_t value_pos = input.find(key) + key.length() + 1; // extract full value including spaces
+        size_t value_pos = input.find(ttl_seconds) + ttl_seconds.length() + 1; // extract full value including spaces
         if (value_pos < input.length()) {
             value = input.substr(value_pos);
             return store.setexpire(key, value, ttl_seconds);

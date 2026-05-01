@@ -36,13 +36,16 @@ bool Store::is_expired(const std::string& key) {
  */
 void Store::cleanup_expired() {
     std::lock_guard<std::mutex> lock(store_mutex);
-    // REDIS_LOG(INFO, "cleanup_expired");
-    for (auto it = expiry.begin(); it != expiry.end(); ++it ) {
+    for (auto it = expiry.begin(); it != expiry.end(); ) {
         if (std::time(nullptr) > it->second) {
-            REDIS_LOG(INFO,"Cleared %s ", it->first.c_str());
+            REDIS_LOG(DEBUG,"Cleared %s ", it->first.c_str());
             db.erase(it->first);
             it = expiry.erase(it);
-            compact_aof();
+            if (compact_aof()) {
+                REDIS_LOG(DEBUG, "Compacted");
+            }
+        } else {
+            ++it;
         }
     }
 }
@@ -317,6 +320,5 @@ int8_t Store::compact_aof() {
 
     aof_file.open(aof_filename, std::ios::app);
     REDIS_LOG(INFO, "SUCCESS AOF compaction complete. New size=%s keys=%s",  std::to_string(db.size()).c_str() , aof_filename.c_str());
-
     return 0;
 }
