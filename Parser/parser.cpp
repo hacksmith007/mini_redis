@@ -29,7 +29,7 @@ std::string processCommand(const std::string& input, Store& store) {
         size_t value_pos = input.find(key) + key.length() + 1; // extract full value including spaces
         if (value_pos < input.length()) {
             value = input.substr(value_pos);
-            return store.set(key, value);
+            return store.redisSet(key, value);
         }
         return "ERROR: SET requires a value";
     }
@@ -42,16 +42,16 @@ std::string processCommand(const std::string& input, Store& store) {
         size_t value_pos = input.find(ttl_seconds) + ttl_seconds.length() + 1; // extract full value including spaces
         if (value_pos < input.length()) {
             value = input.substr(value_pos);
-            return store.setexpire(key, value, ttl_seconds);
+            return store.redisSetExpire(key, value, ttl_seconds);
         }
         return "ERROR: SET requires a value";
     }
     else if (cmd == "GET") {
         iss >> key;
-        return store.get(key);
+        return store.redisGet(key);
     }
     else if (cmd == "DEL") {
-        return store.del(key);
+        return store.redisDel(key);
     }
 
     return "ERROR: Unknown command";
@@ -61,7 +61,7 @@ std::string processCommand(const std::string& input, Store& store) {
  * ============================================================
  * FUNCTION: redisPollCleanup
  * ============================================================
- * Placeholder for periodic cleanup tasks (e.g., expiry handling).
+ * Placeholder for periodic cleanup tasks (e.g., cacheExpirtyDb handling).
  * Intended to be invoked by scheduler.
  * ============================================================
  */
