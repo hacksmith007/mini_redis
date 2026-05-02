@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <string>
 #include <fstream>
+#include <mutex>
+#include <ctime>
 
 class Store {
 private:
@@ -17,7 +19,17 @@ private:
     std::mutex redisStoreMutex;
 
 public:
+    static Store& getInstance(const std::string& aof_file = "data.aof", bool fsync = false);
+    Store(const Store&) = delete;
+    Store& operator=(const Store&) = delete;
+    Store(Store&&) = delete;
+    Store& operator=(Store&&) = delete;
+    ~Store();
+
+private:
     explicit Store(std::string  aof_file = "data.aof", bool fsync = false);
+
+public:
     void redisAppendToAof(const std::string& command);
     void redisReplayAof(const std::string& filename);
     void redisLoad(const std::string& filename);
@@ -28,6 +40,5 @@ public:
     std::string redisSetExpire(const std::string &key, const std::string& value, const std::string& ttl_seconds);
     int8_t redisCompactAof();
     bool redisIsExpired(const std::string& key);
-    ~Store();
 };
 #endif

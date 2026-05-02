@@ -40,8 +40,8 @@ int main() {
     struct sockaddr_in address;
     int addrlen = sizeof(address);
 
-    // Initialize storage and load data from disk
-    Store store;
+    // Initialize storage and load persisted data from disk
+    Store& store = Store::getInstance();
     store.redisLoad("data.cacheDbRedis");
 
     // Start Scheduler (background thread)

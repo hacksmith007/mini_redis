@@ -12,6 +12,11 @@
 // std::unordered_map<std::string, std::time_t> cacheExpirtyDb;
 // std::mutex redisStoreMutex;
 
+Store& Store::getInstance(const std::string& aof_file, bool fsync) {
+    static Store instance(aof_file, fsync);
+    return instance;
+}
+
 /**
  * ============================================================
  * FUNCTION: redisIsExpired
