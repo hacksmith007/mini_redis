@@ -99,11 +99,11 @@ void Scheduler::stop() {
  * ============================================================
  * FUNCTION: expiryPoll
  * ============================================================
- * Example periodic task function for expiry handling.
+ * Example periodic task function for cacheExpirtyDb handling.
  * Intended to be scheduled via Scheduler.
  * ============================================================
  */
 void expiryPoll(Store &store) {
     // REDIS_LOG(INFO, "ExpiryPoll Running");
-    store.cleanup_expired();
+    store.redisCleanupExpired();
 }

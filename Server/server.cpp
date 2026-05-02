@@ -17,7 +17,7 @@
  *
  * Responsibilities:
  *  - Initialize storage and load persisted data
- *  - Start background scheduler for periodic tasks (e.g. expiry)
+ *  - Start background scheduler for periodic tasks (e.g. cacheExpirtyDb)
  *  - Setup TCP server (socket, bind, listen)
  *  - Accept client connection (blocking call)
  *  - Handle client requests in a loop
@@ -42,10 +42,10 @@ int main() {
 
     // Initialize storage and load data from disk
     Store store;
-    store.load("data.db");
+    store.redisLoad("data.cacheDbRedis");
 
     // Start Scheduler (background thread)
-    // Runs expiry polling every 5 seconds
+    // Runs cacheExpirtyDb polling every 5 seconds
     Scheduler scheduler;
     REDIS_LOG(INFO, "Scheduler started");
     scheduler.register_task([&store]() { expiryPoll(store); }, 5000);
@@ -124,7 +124,7 @@ int main() {
         // Compact AOF (Append Only File)
         std::string response = "Unknown Command\n" ;
         if (command == "compact") {
-            if (store.compact_aof()) {
+            if (store.redisCompactAof()) {
                 response = "Compact Failed";
                 REDIS_LOG(ERROR, "Compact command could not be completed");
             }

@@ -9,28 +9,25 @@
 
 class Store {
 private:
-    std::unordered_map<std::string, std::string> db;
+    std::unordered_map<std::string, std::string> cacheDbRedis;
     std::ofstream aof_file;
     std::string aof_filename;
     bool use_fsync;
-    std::unordered_map<std::string, std::time_t> expiry;
-    std::mutex store_mutex;
-
-    void append_to_aof(const std::string& command);
-    void replay_aof(const std::string& filename);
+    std::unordered_map<std::string, std::time_t> cacheExpirtyDb;
+    std::mutex redisStoreMutex;
 
 public:
     explicit Store(std::string  aof_file = "data.aof", bool fsync = false);
+    void redisAppendToAof(const std::string& command);
+    void redisReplayAof(const std::string& filename);
+    void redisLoad(const std::string& filename);
+    void redisCleanupExpired();
+    std::string redisSet(const std::string& key, const std::string& value);
+    std::string redisGet(const std::string& key);
+    std::string redisDel(const std::string& key);
+    std::string redisSetExpire(const std::string &key, const std::string& value, const std::string& ttl_seconds);
+    int8_t redisCompactAof();
+    bool redisIsExpired(const std::string& key);
     ~Store();
-
-    std::string set(const std::string& key, const std::string& value);
-    std::string get(const std::string& key);
-    std::string del(const std::string& key);
-    std::string setexpire(const std::string &key, const std::string& value, const std::string& ttl_seconds);
-
-    void load(const std::string& filename);
-    int8_t compact_aof();
-    bool is_expired(const std::string& key);
-    void cleanup_expired();
 };
 #endif
