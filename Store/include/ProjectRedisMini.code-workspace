@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../../../../CLionProjects"
+		},
+		{
+			"path": "../../.."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"*.conf": "bitbake",
+			"*.inc": "bitbake"
+		}
+	}
+}

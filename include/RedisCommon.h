@@ -19,6 +19,7 @@ private:
 
     static std::string current_time();
 
+
 public:
     // Disable copy
     Logger(const Logger&) = delete;
@@ -26,7 +27,7 @@ public:
 
     // Singleton access
     static Logger& instance();
-
+    
     // 👇 updated signature
     void log(RedisLogLevel level,
              const char* file,

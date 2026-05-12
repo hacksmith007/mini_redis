@@ -49,6 +49,7 @@ int main() {
     Scheduler scheduler;
     REDIS_LOG(INFO, "Scheduler started");
     scheduler.register_task([&store]() { expiryPoll(store); }, 5000);
+    // scheduler.register_task([&store]() { store.saveSnapshotWithFork("database.rdb"); }, 5000);
 
     // Create TCP socket
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -99,7 +100,7 @@ int main() {
         // Handle client disconnect
         if (valread <= 0) {
             std::cout << "Client disconnected" << std::endl;
-            REDIS_LOG(INFO, "Client disconnected");
+            REDIS_LOG(WARN, "Client disconnected");
             break;
         }
 

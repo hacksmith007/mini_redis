@@ -39,6 +39,9 @@ public:
     std::string redisDel(const std::string& key);
     std::string redisSetExpire(const std::string &key, const std::string& value, const std::string& ttl_seconds);
     int8_t redisCompactAof();
+    uint64_t getCacheSize() const { return cacheDbRedis.size(); }
     bool redisIsExpired(const std::string& key);
+    void saveSnapshot(const std::string& filename);
+    int saveSnapshotWithFork(const std::string& filename);
 };
 #endif

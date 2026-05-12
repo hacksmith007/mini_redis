@@ -4,6 +4,8 @@
 #include <cstdarg>
 #include <thread>
 #include <mutex>
+#include <cstdlib>
+#include <strings.h>
 #include  "RedisCommon.h"
 #include "commonLibsEnums.h"
 
@@ -33,6 +35,7 @@ std::string redisStatusToString(const RedisStatus status) {
             return "REDIS_STATUS_UNKNOWN";
     }
 }
+
 // Constructor
 Logger::Logger() {
     general_fp = fopen("redis.log", "a");
@@ -86,7 +89,13 @@ void Logger::log(RedisLogLevel level,
                  const char* func,
                  const char* fmt, ...) {
     std::lock_guard<std::mutex> lock(mtx);
-
+    // Report DEBUG level logs only if the environment variable REDIS_LOG_LEVEL is set to DEBUG
+    if (level == DEBUG) {
+        const char* env = std::getenv("REDIS_LOG_LEVEL");
+        if (!env || strcasecmp(env, "DEBUG") != 0) {
+            return; // skip debug logs unless explicitly enabled
+        }
+    }
     char message[1024];
 
     va_list args;

@@ -2,6 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <unistd.h>
+#include <sys/wait.h>
 #include  <unordered_map>
 #include <thread>
 #include <mutex>
@@ -69,9 +70,9 @@ Store::Store(std::string  aof_file_name, const bool fsync)
     aof_file.open(aof_filename, std::ios::app);
     if (!aof_file.is_open()) {
         std::cerr << "Warning: Could not open AOF file: " << aof_filename << std::endl;
-        REDIS_LOG(INFO, "FAIL AOF_OPEN file=%s", aof_filename.c_str());
+        REDIS_LOG(DEBUG, "FAIL AOF_OPEN file=%s", aof_filename.c_str());
     } else {
-        REDIS_LOG(INFO, "SUCCESS AOF_OPEN file=%s", aof_filename.c_str());
+        REDIS_LOG(DEBUG, "SUCCESS AOF_OPEN file=%s", aof_filename.c_str());
     }
 
       redisReplayAof(aof_filename);
@@ -326,4 +327,61 @@ int8_t Store::redisCompactAof() {
     aof_file.open(aof_filename, std::ios::app);
     REDIS_LOG(INFO, "SUCCESS AOF compaction complete. New size=%s keys=%s",  std::to_string(cacheDbRedis.size()).c_str() , aof_filename.c_str());
     return 0;
+}
+
+/**
+ * ============================================================
+ * FUNCTION: saveSnapshot
+ * ============================================================
+ * Writes the current in-memory key/value map to a snapshot file.
+ * Uses a simple legacy text format: "key:<key>|value:<value>\n".
+ * This function opens the target file in truncate mode, writes every
+ * entry from cacheDbRedis, and flushes the output before closing.
+ * ============================================================
+ */
+void Store::saveSnapshot(const std::string&filename) {
+    std::ofstream snapshot(filename, std::ios::trunc);
+    if (!snapshot.is_open()) {
+        REDIS_LOG(ERROR, "Could not create snapshot file.");
+        return;
+    }
+    uint64_t totalEntries = cacheDbRedis.size();
+    for (const auto& pair : cacheDbRedis) {
+        snapshot << "key:" << pair.first << "|value:" << pair.second << "\n";
+    }
+
+    snapshot.flush();
+    snapshot.close();
+    REDIS_LOG(INFO, "SUCCESS Snapshot saved to %s", filename.c_str());
+}
+
+/**
+ * ============================================================
+ * FUNCTION: saveSnapshotWithFork
+ * ============================================================
+ * Saves snapshot in background using fork().
+ * Parent process returns immediately, child process performs I/O.
+ * Parent can continue serving requests while snapshot is being written.
+ * Returns: PID of child process on success, -1 on fork failure.
+ * ============================================================
+ */
+int Store::saveSnapshotWithFork(const std::string& filename) {
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        REDIS_LOG(ERROR, "Fork failed for background snapshot.");
+        return -1;
+    }
+
+    if (pid == 0) {
+        // Child process: perform snapshot operation
+        REDIS_LOG(INFO, "Child process (PID %d) starting snapshot to %s", getpid(), filename.c_str());
+        saveSnapshot(filename);
+        REDIS_LOG(INFO, "Child process (PID %d) completed snapshot.", getpid());
+        std::exit(0);
+    } else {
+        // Parent process: return immediately to continue serving requests
+        REDIS_LOG(INFO, "Snapshot fork started. Child PID: %d, file: %s", pid, filename.c_str());
+        return pid;
+    }
 }
