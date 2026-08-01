@@ -66,13 +66,13 @@ void Store::redisCleanupExpired() {
  */
 Store::Store(std::string  aof_file_name, const bool fsync)
     : aof_filename(std::move(aof_file_name)), use_fsync(fsync) {
-    REDIS_LOG(DEBUG, "filename %s", aof_filename.c_str());
+    REDIS_LOG(INFO, "filename %s", aof_filename.c_str());
     aof_file.open(aof_filename, std::ios::app);
     if (!aof_file.is_open()) {
         std::cerr << "Warning: Could not open AOF file: " << aof_filename << std::endl;
-        REDIS_LOG(DEBUG, "FAIL AOF_OPEN file=%s", aof_filename.c_str());
+        REDIS_LOG(ERROR, "FAIL AOF_OPEN file=%s", aof_filename.c_str());
     } else {
-        REDIS_LOG(DEBUG, "SUCCESS AOF_OPEN file=%s", aof_filename.c_str());
+        REDIS_LOG(INFO, "SUCCESS AOF_OPEN file=%s", aof_filename.c_str());
     }
 
       redisReplayAof(aof_filename);
@@ -125,14 +125,14 @@ void Store::redisAppendToAof(const std::string& command) {
 void Store::redisReplayAof(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
-        REDIS_LOG(INFO, "FAIL AOF_REPLAY_OPEN file=",  filename.c_str());
+        REDIS_LOG(ERROR, "FAIL AOF_REPLAY_OPEN file=",  filename.c_str());
         return;
     }
 
     std::string line;
     while (std::getline(file, line)) {
         if (line.empty()) {
-            REDIS_LOG(INFO, "FAIL AOF_REPLAY command=<empty> reason=empty_line");
+            REDIS_LOG(ERROR, "FAIL AOF_REPLAY command=<empty> reason=empty_line");
             continue;
         }
 
@@ -143,7 +143,7 @@ void Store::redisReplayAof(const std::string& filename) {
         if (command == "SET") {
             std::string key;
             if (!(iss >> key)) {
-                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=missing_key" ,line.c_str());
+                REDIS_LOG(ERROR, "FAIL AOF_REPLAY command=%s reason=missing_key" ,line.c_str());
                 continue;
             }
 
@@ -151,15 +151,15 @@ void Store::redisReplayAof(const std::string& filename) {
             if (value_pos < line.length()) {
                 std::string value = line.substr(value_pos);
                 cacheDbRedis[key] = value;
-                REDIS_LOG(INFO , "SUCCESS AOF_REPLAY command= %s", line.c_str());
+                REDIS_LOG(DEBUG , "SUCCESS AOF_REPLAY command= %s", line.c_str());
             } else {
-                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=missing_value", line.c_str());
+                REDIS_LOG(ERROR, "FAIL AOF_REPLAY command=%s reason=missing_value", line.c_str());
             }
         }
         else if (command == "SETEX") {
             std::string key;
             if (!(iss >> key)) {
-                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=missing_key",line.c_str());
+                REDIS_LOG(ERROR, "FAIL AOF_REPLAY command=%s reason=missing_key",line.c_str());
                 continue;
             }
             std::string ttl_seconds;
@@ -171,22 +171,22 @@ void Store::redisReplayAof(const std::string& filename) {
                 std::string value = line.substr(value_pos);
                 cacheDbRedis[key] = value;
 
-                REDIS_LOG(INFO , "SUCCESS AOF_REPLAY command=%s",line.c_str());
+                REDIS_LOG(DEBUG , "SUCCESS AOF_REPLAY command=%s",line.c_str());
             } else {
-                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=missing_key",line.c_str() );
+                REDIS_LOG(ERROR, "FAIL AOF_REPLAY command=%s reason=missing_key",line.c_str() );
             }
         }
         else if (command == "DEL") {
             std::string key;
             if (!(iss >> key)) {
-                REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=missing_key",  line.c_str());
+                REDIS_LOG(ERROR, "FAIL AOF_REPLAY command=%s reason=missing_key",  line.c_str());
                 continue;
             }
             cacheDbRedis.erase(key);
-            REDIS_LOG(INFO, "SUCCESS AOF_REPLAY command=%s", line.c_str());
+            REDIS_LOG(DEBUG, "SUCCESS AOF_REPLAY command=%s", line.c_str());
         }
         else {
-            REDIS_LOG(INFO, "FAIL AOF_REPLAY command=%s reason=unknown_command", line.c_str());
+            REDIS_LOG(ERROR, "FAIL AOF_REPLAY command=%s reason=unknown_command", line.c_str());
         }
     }
 
@@ -204,8 +204,7 @@ void Store::redisReplayAof(const std::string& filename) {
  */
 std::string Store::redisSet(const std::string& key, const std::string& value) {
     cacheDbRedis[key] = value;
-    REDIS_LOG(INFO, "storing entry to aof");
-
+    REDIS_LOG(DEBUG, "storing entry to aof");
     std::string cmd = "SET " + key + " " + value;
     redisAppendToAof(cmd);
 
@@ -214,7 +213,7 @@ std::string Store::redisSet(const std::string& key, const std::string& value) {
 
 std::string Store::redisSetExpire(const std::string &key, const std::string& value, const std::string& ttl_seconds) {
     std::string cmd = "SETEX " + key + " " + ttl_seconds + " " + value;
-    REDIS_LOG(INFO, "setex storing to aof %s", cmd.c_str());
+    REDIS_LOG(DEBUG, "setex storing to aof %s", cmd.c_str());
     cacheDbRedis[key] = value;
 
     const time_t expire_at = std::time(nullptr) + std::stoi(ttl_seconds);
@@ -232,7 +231,7 @@ std::string Store::redisSetExpire(const std::string &key, const std::string& val
  * ============================================================
  */
 std::string Store::redisGet(const std::string& key) {
-    REDIS_LOG(INFO, "getting key=%s", key.c_str());
+    REDIS_LOG(DEBUG, "getting key=%s", key.c_str());
     if (cacheDbRedis.count(key)) return cacheDbRedis[key];
     return "NULL";
 }
@@ -352,7 +351,7 @@ void Store::saveSnapshot(const std::string&filename) {
 
     snapshot.flush();
     snapshot.close();
-    REDIS_LOG(INFO, "SUCCESS Snapshot saved to %s", filename.c_str());
+    REDIS_LOG(DEBUG, "SUCCESS Snapshot saved to %s", filename.c_str());
 }
 
 /**
@@ -366,22 +365,16 @@ void Store::saveSnapshot(const std::string&filename) {
  * ============================================================
  */
 int Store::saveSnapshotWithFork(const std::string& filename) {
-    pid_t pid = fork();
-
-    if (pid == -1) {
-        REDIS_LOG(ERROR, "Fork failed for background snapshot.");
+    // Use a detached thread to perform snapshot asynchronously.
+    // Forking from a multi-threaded process is unsafe; a background
+    // thread avoids undefined behavior and keeps the server alive.
+    try {
+        std::thread([this, filename]() {
+            saveSnapshot(filename);
+        }).detach();
+        return 0;
+    } catch (...) {
+        REDIS_LOG(ERROR, "Failed to start background snapshot thread for %s", filename.c_str());
         return -1;
-    }
-
-    if (pid == 0) {
-        // Child process: perform snapshot operation
-        REDIS_LOG(INFO, "Child process (PID %d) starting snapshot to %s", getpid(), filename.c_str());
-        saveSnapshot(filename);
-        REDIS_LOG(INFO, "Child process (PID %d) completed snapshot.", getpid());
-        std::exit(0);
-    } else {
-        // Parent process: return immediately to continue serving requests
-        REDIS_LOG(INFO, "Snapshot fork started. Child PID: %d, file: %s", pid, filename.c_str());
-        return pid;
     }
 }

@@ -1,0 +1,40 @@
+# Build directories
+cmake-build-*/
+build/
+out/
+dist/
+
+# IDE configuration
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# CMake
+CMakeUserPresets.json
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Compiled objects and libraries
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.lib
+*.exe
+
+# System files
+.DS_Store
+Thumbs.db
+*.log
+*.aof
+*.rdb
+# Dependencies
+/lib/
+/bin/
+
+*.json
