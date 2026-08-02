@@ -5,6 +5,7 @@
 #ifndef MINI_REDIS_REDISCOMMON_H
 #define MINI_REDIS_REDISCOMMON_H
 #include "commonLibsEnums.h"
+extern std::string log_level_global;
 
 class Logger {
 private:

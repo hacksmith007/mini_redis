@@ -9,6 +9,14 @@
 #include  "RedisCommon.h"
 #include "commonLibsEnums.h"
 
+#include <fstream>
+#include <string>
+#include <algorithm>
+#include <cctype>
+
+std::string log_level_global;
+
+
 /**
  * ============================================================
  * FUNCTION: redisStatusToString
@@ -92,8 +100,7 @@ void Logger::log(RedisLogLevel level,
     // Report DEBUG level logs only if the environment variable REDIS_LOG_LEVEL is set to DEBUG
    
     if (level == DEBUG) {
-         const char* env = std::getenv("REDIS_LOG_LEVEL"); 
-        if (!env || strcasecmp(env, "DEBUG") != 0) {
+        if (!log_level_global.empty() && strcasecmp(log_level_global.c_str(), "DEBUG") != 0) {
             return; // skip debug logs unless explicitly enabled
         }
     }
