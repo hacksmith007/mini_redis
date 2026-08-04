@@ -137,9 +137,15 @@ int main() {
         }
         else {
             //Process command and generate response
-            response = processCommand(buffer, store);
+            RedisStatus status = processCommand(buffer, store, response);
+            if (status == REDIS_STATUS_OK) {
+                // response already contains GET result or other success message
+            } else if (status == REDIS_STATUS_NOT_FOUND) {
+                response = "ENTRY NOT FOUND";
+            } else {
+                response = "ERROR";
+            }
             response += "\n";
-
         }
         //Send response back to client
         send(new_socket, response.c_str(), response.size(), 0);

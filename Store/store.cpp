@@ -102,14 +102,9 @@ Store::~Store() {
  */
 void Store::redisAppendToAof(const std::string& command) {
     REDIS_LOG(DEBUG, "command %s", command.c_str());
-    std::string clean = command;
-    // Remove trailing newline(s)
-    while (!clean.empty() && (clean.back() == '\n' || clean.back() == '\r')) {
-        clean.pop_back();
-    }
-    aof_file << clean << std::endl;
+    aof_file << command;
     if (use_fsync) {
-        REDIS_LOG(INFO, "Flushed");
+        REDIS_LOG(DEBUG, "Flushed command to AOF: %s", command.c_str());
         aof_file.flush(); // ensure durability
     }
 }
@@ -202,16 +197,16 @@ void Store::redisReplayAof(const std::string& filename) {
  * Inserts or updates a key-value pair and logs to AOF.
  * ============================================================
  */
-std::string Store::redisSet(const std::string& key, const std::string& value) {
+RedisStatus Store::redisSet(const std::string& key, const std::string& value) {
     cacheDbRedis[key] = value;
     REDIS_LOG(DEBUG, "storing entry to aof");
     std::string cmd = "SET " + key + " " + value;
     redisAppendToAof(cmd);
 
-    return "OK";
+    return REDIS_STATUS_OK;
 }
 
-std::string Store::redisSetExpire(const std::string &key, const std::string& value, const std::string& ttl_seconds) {
+RedisStatus Store::redisSetExpire(const std::string &key, const std::string& value, const std::string& ttl_seconds) {
     std::string cmd = "SETEX " + key + " " + ttl_seconds + " " + value;
     REDIS_LOG(DEBUG, "setex storing to aof %s", cmd.c_str());
     cacheDbRedis[key] = value;
@@ -220,7 +215,7 @@ std::string Store::redisSetExpire(const std::string &key, const std::string& val
     cacheExpirtyDb[key] = expire_at;
 
     redisAppendToAof(cmd);
-    return "OK";
+    return REDIS_STATUS_OK;
 }
 
 /**
@@ -243,13 +238,13 @@ std::string Store::redisGet(const std::string& key) {
  * Deletes a key from the database and logs to AOF.
  * ============================================================
  */
-std::string Store::redisDel(const std::string& key) {
+RedisStatus Store::redisDel(const std::string& key) {
     if (cacheDbRedis.erase(key)) {
         std::string cmd = "DEL " + key;
         redisAppendToAof(cmd);
-        return "DELETED";
+        return REDIS_STATUS_OK;
     }
-    return "NOT FOUND";
+    return REDIS_STATUS_NOT_FOUND;
 }
 
 /**
@@ -291,7 +286,9 @@ void Store::redisLoad(const std::string& filename) {
  * ============================================================
  * FUNCTION: redisCompactAof
  * ============================================================
- * Rewrites the AOF using the current in-memory database.
+ * Rewrites the AOF using the current in-memory database to 
+ * reduce file size and remove redundant commands.
+ * Returns 0 on success, -1 on failure.
  * ============================================================
  */
 int8_t Store::redisCompactAof()
