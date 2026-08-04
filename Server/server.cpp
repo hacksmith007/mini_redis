@@ -35,7 +35,7 @@
  * ============================================================
  */
 int main() {
-    log_level_global = getAttributeValue("config.txt", "REDIS_LOG_LEVEL");
+    log_level_global = getAttributeValue("redis.conf", "log_level");
     std::cout << "Log Level: " << log_level_global << std::endl;
     REDIS_LOG(INFO, "Entrypoint Redis Started");
     int server_fd, new_socket;
