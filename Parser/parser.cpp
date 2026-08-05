@@ -2,6 +2,7 @@
 #include <sstream>
 #include "store.h"
 #include "commonLibsEnums.h"
+#include "include/parser.h"
 
 /**
  * ============================================================
@@ -19,6 +20,12 @@
  * ============================================================
  */
 std::string processCommand(const std::string& input, Store& store) {
+    std::string response;
+    processCommand(input, store, response);
+    return response;
+}
+
+RedisStatus processCommand(const std::string& input, Store& store, std::string &response) {
     std::istringstream iss(input);
     std::string cmd, key, value;
 
@@ -29,32 +36,39 @@ std::string processCommand(const std::string& input, Store& store) {
         size_t value_pos = input.find(key) + key.length() + 1; // extract full value including spaces
         if (value_pos < input.length()) {
             value = input.substr(value_pos);
-            return store.redisSet(key, value);
+            RedisStatus s = store.redisSet(key, value);
+            if (s == REDIS_STATUS_OK) response = "OK";
+            return s;
         }
-        return "ERROR: SET requires a value";
+        return REDIS_STATUS_FAILURE;
     }
     else if (cmd == "SETEX") {
         iss >> key;
         std::string ttl_seconds;
         iss >> ttl_seconds;
 
-
         size_t value_pos = input.find(ttl_seconds) + ttl_seconds.length() + 1; // extract full value including spaces
         if (value_pos < input.length()) {
             value = input.substr(value_pos);
-            return store.redisSetExpire(key, value, ttl_seconds);
+            RedisStatus s = store.redisSetExpire(key, value, ttl_seconds);
+            if (s == REDIS_STATUS_OK) response = "OK";
+            return s;
         }
-        return "ERROR: SET requires a value";
+        return REDIS_STATUS_FAILURE;
     }
     else if (cmd == "GET") {
         iss >> key;
-        return store.redisGet(key);
+        response = store.redisGet(key);
+        return (response == "NULL") ? REDIS_STATUS_NOT_FOUND : REDIS_STATUS_OK;
     }
     else if (cmd == "DEL") {
-        return store.redisDel(key);
+        iss >> key;
+        RedisStatus s = store.redisDel(key);
+        if (s == REDIS_STATUS_OK) response = "OK";
+        return s;
     }
 
-    return "ERROR: Unknown command";
+    return REDIS_STATUS_FAILURE;
 }
 
 /**

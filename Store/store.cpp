@@ -6,12 +6,9 @@
 #include  <unordered_map>
 #include <thread>
 #include <mutex>
-#include <utility>
 #include "store.h"
 #include "RedisCommon.h"
-
-// std::unordered_map<std::string, std::time_t> cacheExpirtyDb;
-// std::mutex redisStoreMutex;
+#include "utility.h"
 
 Store& Store::getInstance(const std::string& aof_file, bool fsync) {
     static Store instance(aof_file, fsync);
@@ -65,8 +62,8 @@ void Store::redisCleanupExpired() {
  * ============================================================
  */
 Store::Store(std::string  aof_file_name, const bool fsync)
-    : aof_filename(std::move(aof_file_name)), use_fsync(fsync) {
-    REDIS_LOG(INFO, "filename %s", aof_filename.c_str());
+    : aof_filename(std::move(aof_file_name)), use_fsync(fsync), max_aof_size(getAttributeValue("redis.conf", "max_appendfile_size").empty() ? 64 * 1024 * 1024 : std::stoull(getAttributeValue("redis.conf", "max_appendfile_size"))) {
+    REDIS_LOG(INFO, "filename %s max_aof_size %zu use_fsync %s", aof_filename.c_str(), max_aof_size, use_fsync ? "true" : "false");
     aof_file.open(aof_filename, std::ios::app);
     if (!aof_file.is_open()) {
         std::cerr << "Warning: Could not open AOF file: " << aof_filename << std::endl;
@@ -101,16 +98,24 @@ Store::~Store() {
  * ============================================================
  */
 void Store::redisAppendToAof(const std::string& command) {
-    REDIS_LOG(DEBUG, "command %s", command.c_str());
-    std::string clean = command;
-    // Remove trailing newline(s)
-    while (!clean.empty() && (clean.back() == '\n' || clean.back() == '\r')) {
-        clean.pop_back();
+    if (!aof_file.is_open()) {
+        REDIS_LOG(ERROR, "AOF file not open for append");
+        return;
     }
-    aof_file << clean << std::endl;
+
+    REDIS_LOG(DEBUG, "command %s max_aof_size %zu current_aof_size %zu", command.c_str(), max_aof_size, current_aof_size);
+    aof_file << command << '\n';
+    current_aof_size = getAofFileSize();
+
+    if (max_aof_size > 0 &&
+        current_aof_size >= max_aof_size &&
+        current_aof_size >= last_compaction_size * 2) {
+        redisCompactAof();
+    }
+
     if (use_fsync) {
-        REDIS_LOG(INFO, "Flushed");
-        aof_file.flush(); // ensure durability
+        REDIS_LOG(DEBUG, "Flushed command [%s] to AOF file %s", command.c_str(), aof_filename.c_str());
+        aof_file.flush();
     }
 }
 
@@ -202,16 +207,16 @@ void Store::redisReplayAof(const std::string& filename) {
  * Inserts or updates a key-value pair and logs to AOF.
  * ============================================================
  */
-std::string Store::redisSet(const std::string& key, const std::string& value) {
+RedisStatus Store::redisSet(const std::string& key, const std::string& value) {
     cacheDbRedis[key] = value;
     REDIS_LOG(DEBUG, "storing entry to aof");
     std::string cmd = "SET " + key + " " + value;
     redisAppendToAof(cmd);
 
-    return "OK";
+    return REDIS_STATUS_OK;
 }
 
-std::string Store::redisSetExpire(const std::string &key, const std::string& value, const std::string& ttl_seconds) {
+RedisStatus Store::redisSetExpire(const std::string &key, const std::string& value, const std::string& ttl_seconds) {
     std::string cmd = "SETEX " + key + " " + ttl_seconds + " " + value;
     REDIS_LOG(DEBUG, "setex storing to aof %s", cmd.c_str());
     cacheDbRedis[key] = value;
@@ -220,7 +225,7 @@ std::string Store::redisSetExpire(const std::string &key, const std::string& val
     cacheExpirtyDb[key] = expire_at;
 
     redisAppendToAof(cmd);
-    return "OK";
+    return REDIS_STATUS_OK;
 }
 
 /**
@@ -243,13 +248,13 @@ std::string Store::redisGet(const std::string& key) {
  * Deletes a key from the database and logs to AOF.
  * ============================================================
  */
-std::string Store::redisDel(const std::string& key) {
+RedisStatus Store::redisDel(const std::string& key) {
     if (cacheDbRedis.erase(key)) {
         std::string cmd = "DEL " + key;
         redisAppendToAof(cmd);
-        return "DELETED";
+        return REDIS_STATUS_OK;
     }
-    return "NOT FOUND";
+    return REDIS_STATUS_NOT_FOUND;
 }
 
 /**
@@ -261,10 +266,10 @@ std::string Store::redisDel(const std::string& key) {
  * ============================================================
  */
 void Store::redisLoad(const std::string& filename) {
-    REDIS_LOG(INFO,"LOADING data from file %s", filename.c_str());
     std::ifstream file(filename);
     if (!file.is_open()) return;
-
+    
+    REDIS_LOG(INFO,"LOADING data from file %s", filename.c_str());
     std::string line;
     while (std::getline(file, line)) {
         size_t pipe_pos = line.find('|');
@@ -291,43 +296,87 @@ void Store::redisLoad(const std::string& filename) {
  * ============================================================
  * FUNCTION: redisCompactAof
  * ============================================================
- * Rewrites AOF file with current database state to reduce size.
- * Performs atomic replacement of old AOF.
+ * Rewrites the AOF using the current in-memory database to 
+ * reduce file size and remove redundant commands.
+ * Returns 0 on success, -1 on failure.
  * ============================================================
  */
-int8_t Store::redisCompactAof() {
+int8_t Store::redisCompactAof()
+{
     std::string temp_file = aof_filename + ".tmp";
-    std::ofstream temp(temp_file, std::ios::trunc);
 
+    std::ofstream temp(temp_file, std::ios::out | std::ios::trunc);
     if (!temp.is_open()) {
         REDIS_LOG(ERROR, "Could not create temporary AOF file.");
         return -1;
     }
 
-    for (const auto& pair : cacheDbRedis) {
-        temp << "SET " << pair.first << " " << pair.second << "\n";
+    // Serialize current database state
+    for (const auto& [key, value] : cacheDbRedis) {
+        temp << "SET " << key << " " << value << '\n';
+
+        if (!temp) {
+            REDIS_LOG(ERROR, "Failed while writing compacted AOF.");
+            temp.close();
+            std::remove(temp_file.c_str());
+            return -1;
+        }
     }
 
     temp.flush();
+
+    if (!temp) {
+        REDIS_LOG(ERROR, "Failed to flush compacted AOF.");
+        temp.close();
+        std::remove(temp_file.c_str());
+        return -1;
+    }
+
     temp.close();
 
-    aof_file.close();
+    // Close current AOF before replacing it
+    if (aof_file.is_open())
+        aof_file.close();
 
-    if (std::remove(aof_filename.c_str()) != 0) {
-        REDIS_LOG(ERROR, "Could not remove old AOF file.");
-        return -1;
-    }
+#ifdef _WIN32
+    // Windows std::rename() won't overwrite an existing file.
+    std::remove(aof_filename.c_str());
+#endif
 
     if (std::rename(temp_file.c_str(), aof_filename.c_str()) != 0) {
-        REDIS_LOG(ERROR, "Could not rename temporary AOF file.");
+        REDIS_LOG(ERROR, "Could not replace AOF file.");
+        std::remove(temp_file.c_str());
         return -1;
     }
 
-    aof_file.open(aof_filename, std::ios::app);
-    REDIS_LOG(INFO, "SUCCESS AOF compaction complete. New size=%s keys=%s",  std::to_string(cacheDbRedis.size()).c_str() , aof_filename.c_str());
+    // Reopen AOF for appending new commands
+    aof_file.open(aof_filename, std::ios::out | std::ios::app);
+
+    if (!aof_file.is_open()) {
+        REDIS_LOG(ERROR, "Failed to reopen AOF file.");
+        return -1;
+    }
+    last_compaction_size = getAofFileSize();
+    REDIS_LOG(
+        INFO,
+        "AOF compaction complete. Keys=%zu New AoF size=%zu",
+        cacheDbRedis.size(),
+        getAofFileSize());
     return 0;
 }
 
+size_t Store::getAofFileSize() const
+{
+    try
+    {
+        return std::filesystem::file_size(aof_filename);
+    }
+    catch (const std::filesystem::filesystem_error& e)
+    {
+        REDIS_LOG(ERROR, "Failed to get AOF file size: %s", e.what());
+        return 0;
+    }
+}
 /**
  * ============================================================
  * FUNCTION: saveSnapshot
