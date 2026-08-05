@@ -12,6 +12,9 @@ enum RedisLogLevel {
     WARN,
     ERROR,
     DEBUG,
+    DEBUG2,
+    DEBUG3,
+    DEBUG4
 };
 
 enum RedisStatus {

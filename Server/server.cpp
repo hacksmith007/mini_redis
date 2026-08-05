@@ -43,7 +43,7 @@ int main() {
     int addrlen = sizeof(address);
 
     // Initialize storage and load persisted data from disk
-    Store& store = Store::getInstance();
+    Store& store = Store::getInstance("data.aof", getAttributeValue("redis.conf", "fsync").empty() ? false : (getAttributeValue("redis.conf", "fsync") == "true"));
     store.redisLoad("data.cacheDbRedis");
 
     // Start Scheduler (background thread)

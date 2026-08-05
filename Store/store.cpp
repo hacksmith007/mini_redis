@@ -10,9 +10,6 @@
 #include "RedisCommon.h"
 #include "utility.h"
 
-// std::unordered_map<std::string, std::time_t> cacheExpirtyDb;
-// std::mutex redisStoreMutex;
-
 Store& Store::getInstance(const std::string& aof_file, bool fsync) {
     static Store instance(aof_file, fsync);
     return instance;
@@ -66,7 +63,7 @@ void Store::redisCleanupExpired() {
  */
 Store::Store(std::string  aof_file_name, const bool fsync)
     : aof_filename(std::move(aof_file_name)), use_fsync(fsync), max_aof_size(getAttributeValue("redis.conf", "max_appendfile_size").empty() ? 64 * 1024 * 1024 : std::stoull(getAttributeValue("redis.conf", "max_appendfile_size"))) {
-    REDIS_LOG(INFO, "filename %s", aof_filename.c_str());
+    REDIS_LOG(INFO, "filename %s max_aof_size %zu use_fsync %s", aof_filename.c_str(), max_aof_size, use_fsync ? "true" : "false");
     aof_file.open(aof_filename, std::ios::app);
     if (!aof_file.is_open()) {
         std::cerr << "Warning: Could not open AOF file: " << aof_filename << std::endl;
@@ -101,6 +98,11 @@ Store::~Store() {
  * ============================================================
  */
 void Store::redisAppendToAof(const std::string& command) {
+    if (!aof_file.is_open()) {
+        REDIS_LOG(ERROR, "AOF file not open for append");
+        return;
+    }
+
     REDIS_LOG(DEBUG, "command %s", command.c_str());
     aof_file << command;
     current_aof_size = getAofFileSize();
@@ -112,8 +114,8 @@ void Store::redisAppendToAof(const std::string& command) {
     }
 
     if (use_fsync) {
-        REDIS_LOG(DEBUG, "Flushed command to AOF: %s", command.c_str());
-        aof_file.flush(); // ensure durability
+        REDIS_LOG(DEBUG, "Flushed command [%s] to AOF file %s", command.c_str());
+        aof_file.flush();
     }
 }
 
