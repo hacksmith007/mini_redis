@@ -6,13 +6,12 @@
 #include <mutex>
 #include <cstdlib>
 #include <strings.h>
-#include  "RedisCommon.h"
-#include "commonLibsEnums.h"
-
 #include <fstream>
 #include <string>
 #include <algorithm>
 #include <cctype>
+#include  "RedisCommon.h"
+#include "commonLibsEnums.h"
 
 std::string log_level_global;
 
