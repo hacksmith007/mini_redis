@@ -65,13 +65,46 @@ Logger& Logger::instance() {
 // Convert level to string
 const char* Logger::level_to_string(RedisLogLevel level) {
     switch (level) {
-        case DEBUG: return "DEBUG";
-        case INFO:  return "INFO";
-        case WARN:  return "WARN";
-        case ERROR: return "ERROR";
-        default:    return "UNKNOWN";
+        case DEBUG4: return "DEBUG4";
+        case DEBUG3: return "DEBUG3";
+        case DEBUG2: return "DEBUG2";
+        case DEBUG:  return "DEBUG";
+        case INFO:   return "INFO";
+        case WARN:   return "WARN";
+        case ERROR:  return "ERROR";
+        default:     return "UNKNOWN";
     }
 }
+
+static int log_level_rank(RedisLogLevel level) {
+    switch (level) {
+        case ERROR:  return 0;
+        case WARN:   return 1;
+        case INFO:   return 2;
+        case DEBUG:  return 3;
+        case DEBUG2: return 4;
+        case DEBUG3: return 5;
+        case DEBUG4: return 6;
+        default:     return 2; // default to INFO
+    }
+}
+
+static int parse_log_level(const std::string& level) {
+    std::string value = level;
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return std::toupper(c);
+    });
+
+    if (value == "ERROR") return log_level_rank(ERROR);
+    if (value == "WARN" || value == "WARNING") return log_level_rank(WARN);
+    if (value == "INFO") return log_level_rank(INFO);
+    if (value == "DEBUG") return log_level_rank(DEBUG);
+    if (value == "DEBUG2") return log_level_rank(DEBUG2);
+    if (value == "DEBUG3") return log_level_rank(DEBUG3);
+    if (value == "DEBUG4") return log_level_rank(DEBUG4);
+    return log_level_rank(INFO);
+}
+
 const char* get_short_file(const char* path) {
     const char* slash1 = strrchr(path, '/');
     const char* slash2 = strrchr(path, '\\'); // Windows support
@@ -97,12 +130,12 @@ void Logger::log(RedisLogLevel level,
                  const char* func,
                  const char* fmt, ...) {
     std::lock_guard<std::mutex> lock(mtx);
-    // Report DEBUG level logs only if the environment variable REDIS_LOG_LEVEL is set to DEBUG
-   
-    if (level == DEBUG) {
-        if (!log_level_global.empty() && strcasecmp(log_level_global.c_str(), "DEBUG") != 0) {
-            return; // skip debug logs unless explicitly enabled
-        }
+
+    int configured_rank = parse_log_level(log_level_global);
+    int message_rank = log_level_rank(level);
+
+    if (message_rank > configured_rank) {
+        return; // skip messages more verbose than the configured level
     }
 
     char message[1024];
