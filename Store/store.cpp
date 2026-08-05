@@ -6,9 +6,9 @@
 #include  <unordered_map>
 #include <thread>
 #include <mutex>
-#include <utility>
 #include "store.h"
 #include "RedisCommon.h"
+#include "utility.h"
 
 // std::unordered_map<std::string, std::time_t> cacheExpirtyDb;
 // std::mutex redisStoreMutex;
@@ -65,7 +65,7 @@ void Store::redisCleanupExpired() {
  * ============================================================
  */
 Store::Store(std::string  aof_file_name, const bool fsync)
-    : aof_filename(std::move(aof_file_name)), use_fsync(fsync) {
+    : aof_filename(std::move(aof_file_name)), use_fsync(fsync), max_aof_size(getAttributeValue("redis.conf", "max_appendfile_size").empty() ? 64 * 1024 * 1024 : std::stoull(getAttributeValue("redis.conf", "max_appendfile_size"))) {
     REDIS_LOG(INFO, "filename %s", aof_filename.c_str());
     aof_file.open(aof_filename, std::ios::app);
     if (!aof_file.is_open()) {
@@ -103,6 +103,14 @@ Store::~Store() {
 void Store::redisAppendToAof(const std::string& command) {
     REDIS_LOG(DEBUG, "command %s", command.c_str());
     aof_file << command;
+    current_aof_size = getAofFileSize();
+
+    if (max_aof_size > 0 &&
+        current_aof_size >= max_aof_size &&
+        current_aof_size >= last_compaction_size * 2) {
+        redisCompactAof();
+    }
+
     if (use_fsync) {
         REDIS_LOG(DEBUG, "Flushed command to AOF: %s", command.c_str());
         aof_file.flush(); // ensure durability
@@ -352,10 +360,22 @@ int8_t Store::redisCompactAof()
         "AOF compaction complete. Keys=%zu File=%s",
         cacheDbRedis.size(),
         aof_filename.c_str());
-
+        last_compaction_size = getAofFileSize();
     return 0;
 }
 
+size_t Store::getAofFileSize() const
+{
+    try
+    {
+        return std::filesystem::file_size(aof_filename);
+    }
+    catch (const std::filesystem::filesystem_error& e)
+    {
+        REDIS_LOG(ERROR, "Failed to get AOF file size: %s", e.what());
+        return 0;
+    }
+}
 /**
  * ============================================================
  * FUNCTION: saveSnapshot
