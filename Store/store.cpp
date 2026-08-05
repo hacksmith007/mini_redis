@@ -103,8 +103,8 @@ void Store::redisAppendToAof(const std::string& command) {
         return;
     }
 
-    REDIS_LOG(DEBUG, "command %s", command.c_str());
-    aof_file << command;
+    REDIS_LOG(DEBUG, "command %s max_aof_size %zu current_aof_size %zu", command.c_str(), max_aof_size, current_aof_size);
+    aof_file << command << '\n';
     current_aof_size = getAofFileSize();
 
     if (max_aof_size > 0 &&
@@ -114,7 +114,7 @@ void Store::redisAppendToAof(const std::string& command) {
     }
 
     if (use_fsync) {
-        REDIS_LOG(DEBUG, "Flushed command [%s] to AOF file %s", command.c_str());
+        REDIS_LOG(DEBUG, "Flushed command [%s] to AOF file %s", command.c_str(), aof_filename.c_str());
         aof_file.flush();
     }
 }
@@ -356,13 +356,12 @@ int8_t Store::redisCompactAof()
         REDIS_LOG(ERROR, "Failed to reopen AOF file.");
         return -1;
     }
-
+    last_compaction_size = getAofFileSize();
     REDIS_LOG(
         INFO,
-        "AOF compaction complete. Keys=%zu File=%s",
+        "AOF compaction complete. Keys=%zu New AoF size=%zu",
         cacheDbRedis.size(),
-        aof_filename.c_str());
-        last_compaction_size = getAofFileSize();
+        getAofFileSize());
     return 0;
 }
 

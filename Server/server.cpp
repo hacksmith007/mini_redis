@@ -75,86 +75,97 @@ int main() {
     std::cout << "Server running on port " << PORT << std::endl;
     REDIS_LOG(INFO, "Server running on port %s", std::to_string(PORT).c_str());
 
-    // Blocking call: wait for a client to connect
-    new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
-
-    // Send welcome message to client
-    std::string welcome = "Connection established, enter exit to quit\n";
-    send(new_socket, welcome.c_str(), welcome.size(), 0);
-    REDIS_LOG(INFO, "Client connected");
-
-    char buffer[1024] = {0};
-
-    /**
-     * ============================================================
-     * Client request handling loop
-     * ============================================================
-     * - Reads input from client
-     * - Parses and processes command
-     * - Sends response back
-     * - Breaks on "exit" or disconnection
-     * ============================================================
-     */
     while (true) {
-        memset(buffer, 0, sizeof(buffer));
-        int valread = read(new_socket, buffer, 1024);
-
-        // Handle client disconnect
-        if (valread <= 0) {
-            std::cout << "Client disconnected" << std::endl;
-            REDIS_LOG(WARN, "Client disconnected");
-            break;
+        // Blocking call: wait for a client to connect
+        new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
+        if (new_socket < 0) {
+            perror("accept");
+            continue;
         }
 
+        // Send welcome message to client
+        std::string welcome = "Connection established, enter exit to quit\n";
+        send(new_socket, welcome.c_str(), welcome.size(), 0);
+        REDIS_LOG(INFO, "Client connected");
 
-        //Clean input (remove newline / carriage return)
-        std::string command(buffer);
-        if (!command.empty() && command.back() == '\n') {
-            command.pop_back();
-        }
-        if (!command.empty() && command.back() == '\r') {
-            command.pop_back();
-        }
+        std::string recv_buffer;
+        bool connection_open = true;
 
+        /**
+         * ============================================================
+         * Client request handling loop
+         * ============================================================
+         * - Reads input from client
+         * - Parses and processes command
+         * - Sends response back
+         * - Breaks on "exit" or disconnection
+         * ============================================================
+         */
+        while (connection_open) {
+            char buffer[1024];
+            int valread = read(new_socket, buffer, sizeof(buffer));
 
-        //Exit command handling
-        if (command == "exit") {
-            std::cout << "Received exit command, closing connection" << std::endl;
-            REDIS_LOG(INFO, "Received exit command, closing connection");
-            break;
-        }
-        REDIS_LOG(INFO, "Received command %s", command.c_str());
-        // Compact AOF (Append Only File)
-        std::string response = "Unknown Command\n" ;
-        if (command == "compact") {
-            if (store.redisCompactAof()) {
-                response = "Compact Failed";
-                REDIS_LOG(ERROR, "Compact command could not be completed");
+            // Handle client disconnect
+            if (valread <= 0) {
+                std::cout << "Client disconnected" << std::endl;
+                REDIS_LOG(WARN, "Client disconnected");
+                break;
             }
-            response = "Compact Successful\n";
-            REDIS_LOG(INFO, "Compact command completed");
 
-        }
-        else {
-            //Process command and generate response
-            RedisStatus status = processCommand(buffer, store, response);
-            if (status == REDIS_STATUS_OK) {
-                // response already contains GET result or other success message
-            } else if (status == REDIS_STATUS_NOT_FOUND) {
-                response = "ENTRY NOT FOUND";
-            } else {
-                response = "ERROR";
+            recv_buffer.append(buffer, valread);
+
+            size_t newline_pos;
+            while ((newline_pos = recv_buffer.find('\n')) != std::string::npos) {
+                std::string command = recv_buffer.substr(0, newline_pos);
+                recv_buffer.erase(0, newline_pos + 1);
+
+                if (!command.empty() && command.back() == '\r') {
+                    command.pop_back();
+                }
+                if (command.empty()) {
+                    continue;
+                }
+
+                // Exit command handling
+                if (command == "exit") {
+                    std::cout << "Received exit command, closing client connection" << std::endl;
+                    REDIS_LOG(INFO, "Received exit command, closing client connection");
+                    connection_open = false;
+                    break;
+                }
+
+                REDIS_LOG(INFO, "Received command %s", command.c_str());
+                // Compact AOF (Append Only File)
+                std::string response = "Unknown Command\n";
+                if (command == "compact") {
+                    if (store.redisCompactAof()) {
+                        response = "Compact Failed\n";
+                        REDIS_LOG(ERROR, "Compact command could not be completed");
+                    } else {
+                        response = "Compact Successful\n";
+                        REDIS_LOG(INFO, "Compact command completed");
+                    }
+                } else {
+                    // Process command and generate response
+                    RedisStatus status = processCommand(command, store, response);
+                    if (status == REDIS_STATUS_OK) {
+                        // response already contains GET result or other success message
+                    } else if (status == REDIS_STATUS_NOT_FOUND) {
+                        response = "ENTRY NOT FOUND\n";
+                    } else {
+                        response = "ERROR\n";
+                    }
+                }
+
+                // Send response back to client
+                send(new_socket, response.c_str(), response.size(), 0);
             }
-            response += "\n";
         }
-        //Send response back to client
-        send(new_socket, response.c_str(), response.size(), 0);
 
+        close(new_socket);
+        REDIS_LOG(INFO, "Closed client connection, waiting for next client");
     }
 
-    // Cleanup resources
-    close(new_socket);
     close(server_fd);
-
     return 0;
 }
