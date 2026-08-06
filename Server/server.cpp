@@ -8,6 +8,7 @@
 #include "scheduler.h"
 #include "utility.h"
 #define PORT 8080
+int port;
 
 /**
  * ============================================================
@@ -35,6 +36,7 @@
  * ============================================================
  */
 int main() {
+    port = getAttributeValue("redis.conf", "port").empty() ? PORT : std::stoi(getAttributeValue("redis.conf", "port"));
     log_level_global = getAttributeValue("redis.conf", "log_level");
     std::cout << "Log Level: " << log_level_global << std::endl;
     REDIS_LOG(INFO, "Entrypoint Redis Started");
@@ -65,15 +67,15 @@ int main() {
     // Configure server address
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(PORT);
+    address.sin_port = htons(port);
 
     // Bind and listen for incoming connections
 
     bind(server_fd, (struct sockaddr*)&address, sizeof(address));
     listen(server_fd, 3);
 
-    std::cout << "Server running on port " << PORT << std::endl;
-    REDIS_LOG(INFO, "Server running on port %s", std::to_string(PORT).c_str());
+    std::cout << "Server running on port " << port << std::endl;
+    REDIS_LOG(INFO, "Server running on port %s", std::to_string(port).c_str());
 
     while (true) {
         // Blocking call: wait for a client to connect
